@@ -17,7 +17,7 @@ import os
 import copy
 from math import *
 import datetime
-from optimizer_lib import *
+# from optimizer_lib import *
 from model import *
 from utils import *
 from vggmodel import *
@@ -33,10 +33,10 @@ def get_args():
     parser.add_argument('--partition', type=str, default='noniid-labeldir', help='the data partitioning strategy')
     parser.add_argument('--batch_size', type=int, default=32, help='input batch size for training (default: 64)')
     parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
-    parser.add_argument('--epochs', type=int, default=1, help='number of local epochs')
-    parser.add_argument('--n_parties', type=int, default=100, help='number of workers in a distributed cluster')
-    parser.add_argument('--alg', type=str, default='fedprox')
-    parser.add_argument('--comm_round', type=int, default=500, help='number of maximum communication roun')
+    parser.add_argument('--epochs', type=int, default=0, help='number of local epochs')
+    parser.add_argument('--n_parties', type=int, default=10, help='number of workers in a distributed cluster')
+    parser.add_argument('--alg', type=str, default='fedavg')
+    parser.add_argument('--comm_round', type=int, default=1, help='number of maximum communication roun')
     parser.add_argument('--datadir', type=str, required=False, default="./data/", help="Data directory")
     parser.add_argument('--reg', type=float, default=0, help="L2 regularization strength")
     parser.add_argument('--beta', type=float, default=0.3)
@@ -413,7 +413,7 @@ if __name__ == '__main__':
     modeldir = "./models/"
     log_file_name = '{alg}_{time}'
     init_seed = 0
-    device = 'cuda:0'
+    device = 'cpu'
     batch_size = 32
     args = get_args()
     mkdirs(logdir)
