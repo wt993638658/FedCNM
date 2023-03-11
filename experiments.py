@@ -2,8 +2,6 @@ import gc
 import shutil
 import sys
 import warnings
-import numpy as np
-import json
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -15,9 +13,7 @@ import argparse
 import logging
 import os
 import copy
-from math import *
 import datetime
-# from optimizer_lib import *
 from model import *
 from utils import *
 from vggmodel import *
@@ -31,24 +27,29 @@ def get_args():
     parser.add_argument('--model', type=str, default='resnet', help='neural network used in training')
     parser.add_argument('--dataset', type=str, default='cifar10', help='dataset used for training')
     parser.add_argument('--partition', type=str, default='noniid-labeldir', help='the data partitioning strategy')
-    parser.add_argument('--batch_size', type=int, default=32, help='input batch size for training (default: 64)')
+    parser.add_argument('--batch_size', type=int, default=32, help='input batch size for training (default: 32)')
     parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
-    parser.add_argument('--epochs', type=int, default=0, help='number of local epochs')
-    parser.add_argument('--n_parties', type=int, default=10, help='number of workers in a distributed cluster')
-    parser.add_argument('--alg', type=str, default='fedavg')
-    parser.add_argument('--comm_round', type=int, default=1, help='number of maximum communication roun')
+    parser.add_argument('--epochs', type=int, default=1, help='number of local epochs')
+    parser.add_argument('--n_parties', type=int, default=100, help='number of workers in a distributed cluster')
+    parser.add_argument('--alg', type=str, default='fedavg',
+                            help='fl algorithms: fedavg/fedprox/fedcnm/fedadam/fedadc/fedavgm')
+    parser.add_argument('--comm_round', type=int, default=500, help='number of maximum communication roun')
     parser.add_argument('--datadir', type=str, required=False, default="./data/", help="Data directory")
     parser.add_argument('--reg', type=float, default=0, help="L2 regularization strength")
     parser.add_argument('--beta', type=float, default=0.3)
-    parser.add_argument('--rho', type=float, default=0.9, help='Parameter controlling the momentum SGD')
+    parser.add_argument('--rho', type=float, default=0, help='Parameter controlling the momentum SGD')
     parser.add_argument('--sample', type=float, default=0.1, help='Sample ratio for each communication round')
     parser.add_argument('--decay', type=float, default=1, help='learning rate decay per round')
     parser.add_argument('--optimizer', type=str, default='sgd', help='The optimizer')
     parser.add_argument('--nag', type=bool, default=False, help='nesterov')
-    parser.add_argument('--alpha', type=float, default=0.4, help='The first parameter')
-    parser.add_argument('--mu', type=float, default=0.001, help='the second parameter')
-    parser.add_argument('--tau', type=float, default=0.01, help='the third parameter')
-    parser.add_argument('--glr', type=float, default=0.01, help='the third parameter')
+    parser.add_argument('--device', type=str, default='cuda:0', help='The device to run the program')
+    parser.add_argument('--init_seed', type=int, default=0, help="Random seed")
+    parser.add_argument('--modeldir', type=str, required=False, default="./models/", help='Model directory path')
+    parser.add_argument('--logdir', type=str, required=False, default="./logs/", help='Log directory path')
+    parser.add_argument('--alpha', type=float, default=0.4, help='The alpha parameter')
+    parser.add_argument('--mu', type=float, default=0.001, help='the mu parameter for fedprox')
+    parser.add_argument('--tau', type=float, default=0.01, help='the tau parameter for fedadam')
+    parser.add_argument('--glr', type=float, default=0.01, help='the global learning rate  for fedadam')
     args = parser.parse_args()
     return args
 
@@ -408,24 +409,18 @@ def local_train_fedprox(selected,round, args, net_dataidx_map, test_dl=None, dev
 
 if __name__ == '__main__':
 
-    datadir="./data/"
-    logdir = "./logs/"
-    modeldir = "./models/"
     log_file_name = '{alg}_{time}'
-    init_seed = 0
-    device = 'cpu'
-    batch_size = 32
     args = get_args()
-    mkdirs(logdir)
-    mkdirs(modeldir)
+    mkdirs(args.logdir)
+    mkdirs(args.modeldir)
     mkdirs('./temp')
-    device = torch.device(device)
+    device = torch.device(args.device)
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
     log_path = log_file_name.format(alg=args.alg,time=datetime.datetime.now().strftime("%m-%d_%H-%M")) + '.log'
     logging.basicConfig(
-        filename=os.path.join(logdir, log_path),
+        filename=os.path.join(args.logdir, log_path),
         format='%(asctime)s %(levelname)-8s %(message)s',
         datefmt='%m-%d %H:%M', level=logging.DEBUG, filemode='w')
 
@@ -433,17 +428,17 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     logger.info(device)
     logger.info(args)
-    seed = init_seed
+    seed = args.init_seed
     logger.info("#" * 100)
     np.random.seed(seed)
     torch.manual_seed(seed)
     logger.info("Partitioning data")
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(
-        args.dataset, datadir, logdir, args.partition, args.n_parties, beta=args.beta)
+        args.dataset, args.datadir, args.logdir, args.partition, args.n_parties, beta=args.beta)
     n_classes = len(np.unique(y_train))
     train_dl_global, test_dl_global, train_ds_global, test_ds_global = get_dataloader(args.dataset,
-                                                                                      datadir,
-                                                                                      batch_size,
+                                                                                      args.datadir,
+                                                                                      args.batch_size,
                                                                                       32)
     if args.alg == 'fedavg':
         logger.info("Initializing nets")
